@@ -5,8 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test test/protocol.test.js",
-    "check-embed": "node scripts/check-embed.js"
+    "test": "node --test test/protocol.test.js"
   },
   "engines": {
     "node": ">=18"

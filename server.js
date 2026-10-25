@@ -22,8 +22,6 @@ const MAX_TIME = 7 * 24 * 3600;   // верхняя граница позици�
 const SOUND_GAP_MS = 1200;        // один участник: звук эмодзи не чаще
 const ROOM_SOUNDS = 8;            // вся комната: не больше стольких звуков...
 const ROOM_SOUNDS_WINDOW = 3000;  // ...за такой промежуток, мс
-const EMBED_HOSTS = ['tapeop.dev', ...String(process.env.EMBED_HOSTS || '').split(',')]
-  .map((h) => h.trim().toLowerCase()).filter((h) => /^[a-z0-9.-]+\.[a-z]{2,}$/.test(h));
 
 const EPOCH = crypto.randomBytes(6).toString('hex'); // меняется при каждом запуске процесса
 const EMOJI = media.loadEmoji(PUBLIC_DIR);
@@ -139,7 +137,7 @@ function join(ws, m) {
   // Первый вошедший в «пустую» комнату после перезапуска сервера возвращает источник и позицию
   const res = m.resume;
   if (!r.source && res && typeof res === 'object') {
-    const src = validSource(res.source, EMBED_HOSTS);
+    const src = validSource(res.source);
     const t = typeof res.time === 'number' ? res.time : NaN;
     if (src) {
       r.source = src;
@@ -151,7 +149,7 @@ function join(ws, m) {
   }
 
   send(ws, {
-    type: 'init', you: cid, epoch: EPOCH, eid: r.lastEid, embedHosts: EMBED_HOSTS,
+    type: 'init', you: cid, epoch: EPOCH, eid: r.lastEid,
     users: userList(r), source: r.source, recent: r.recent,
     state: { playing: r.playing, time: pos(r) }, history: r.history,
   });
@@ -184,7 +182,7 @@ function handle(ws, m) {
       send(ws, { type: 'state', playing: r.playing, time: pos(r) });
       break;
     case 'setSource': {
-      const src = validSource(m.source, EMBED_HOSTS);
+      const src = validSource(m.source);
       if (!src) return send(ws, { type: 'error', message: 'Этот источник не поддерживается' });
       if (!take(ws.srcB)) return send(ws, { type: 'error', message: 'Слишком часто меняете видео' });
       r.source = src;
@@ -255,7 +253,7 @@ function handle(ws, m) {
 /* ---------- HTTP ---------- */
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' https://www.youtube.com https://s.ytimg.com https://player.vimeo.com https://cdn.jsdelivr.net",
+  "script-src 'self' https://www.youtube.com https://s.ytimg.com https://player.vimeo.com https://cdn.jsdelivr.net https://vk.ru https://vk.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   'media-src * blob: data:',
