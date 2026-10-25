@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: kinoclub
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: 20

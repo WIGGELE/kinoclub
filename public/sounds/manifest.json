@@ -1,0 +1,22 @@
+{
+  "_help": "Чтобы добавить звук: 1) положите файл (mp3/ogg/wav/m4a) в эту папку; 2) добавьте запись в «sounds»; 3) привяжите эмодзи в «bindings». Перезапуск не нужен — манифест перечитывается раз в 15 секунд. Звук без файла на диске просто игнорируется.",
+  "sounds": {
+    "laugh":    { "file": "laugh.mp3",    "title": "Смех",         "volume": 1 },
+    "applause": { "file": "applause.mp3", "title": "Аплодисменты", "volume": 1 },
+    "wow":      { "file": "wow.mp3",      "title": "Ого",          "volume": 1 },
+    "fire":     { "file": "fire.mp3",     "title": "Огонь",        "volume": 1 },
+    "sad":      { "file": "sad.mp3",      "title": "Грусть",       "volume": 1 },
+    "love":     { "file": "love.mp3",     "title": "Любовь",       "volume": 1 }
+  },
+  "bindings": {
+    "😂": "laugh",
+    "🤣": "laugh",
+    "👏": "applause",
+    "😮": "wow",
+    "😲": "wow",
+    "🔥": "fire",
+    "😢": "sad",
+    "😭": "sad",
+    "❤️": "love"
+  }
+}

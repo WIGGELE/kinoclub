@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e0c10">
+<title>Киноклуб</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🎬%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+
+<div id="landing">
+  <div class="card">
+    <div class="logo">Киноклуб</div>
+    <p class="tag">Смотрите видео вместе, где бы вы ни были. Пауза и перемотка у всех синхронны, рядом чат, летающие комментарии и реакции со звуком.</p>
+    <div class="landing-me">
+      <span id="landingAva"></span>
+      <button type="button" id="landingAvaBtn">Выбрать аватарку</button>
+    </div>
+    <label>Как вас зовут?
+      <input id="nameInput" maxlength="24" placeholder="Например, Аня" autocomplete="nickname">
+    </label>
+    <button class="btn primary" id="createBtn">Создать комнату</button>
+    <div class="or">или войти по коду</div>
+    <form id="joinForm">
+      <input id="codeInput" maxlength="12" placeholder="Код комнаты" autocapitalize="characters" autocomplete="off">
+      <button class="btn" id="joinBtn">Войти</button>
+    </form>
+    <ol class="steps">
+      <li>Создайте комнату и отправьте ссылку друзьям</li>
+      <li>Вставьте ссылку на видео (YouTube, Vimeo, RuTube, mp4, tapeop.dev) или выберите файл</li>
+      <li>Нажмите play, и все смотрят одновременно</li>
+    </ol>
+  </div>
+</div>
+
+<div id="room" hidden>
+  <header class="top">
+    <div class="brand">Киноклуб</div>
+    <div class="code">Комната <b id="roomCode"></b></div>
+    <div class="spacer"></div>
+    <span class="conn" id="conn">онлайн</span>
+    <button class="btn" id="copyBtn">Скопировать ссылку</button>
+    <button class="me-btn" id="meBtn" type="button" aria-label="Профиль и аватарка"><span id="meName"></span></button>
+  </header>
+
+  <main class="layout">
+    <section class="stage-col">
+      <div class="stage-wrap" id="stageWrap">
+        <div class="stage" id="stage">
+          <div id="playerHost"></div>
+          <div class="empty" id="empty">
+            <h2>Что смотрим?</h2>
+            <p>Вставьте ссылку на видео ниже или выберите файл с компьютера: тот же файл должен быть у друзей.</p>
+          </div>
+          <div class="need" id="need" hidden>
+            <h2 style="margin:0">Выберите тот же файл</h2>
+            <div>Друзья включили файл <code id="needName"></code></div>
+            <label class="btn primary">Выбрать файл<input type="file" id="needInput" accept="video/*" hidden></label>
+          </div>
+          <div class="banner" id="manualBanner" hidden>
+            <p id="manualText"></p>
+            <a class="btn small" id="openTab" target="_blank" rel="noopener noreferrer" hidden>Открыть отдельно</a>
+            <button type="button" class="btn small primary" id="startTogether">Старт вместе</button>
+            <button type="button" class="btn small" id="manualClose" aria-label="Скрыть подсказку">✕</button>
+          </div>
+          <div id="countdown" hidden><div class="num" id="cdNum"></div><div class="lbl" id="cdLbl"></div></div>
+          <div id="dm" aria-hidden="true"></div>
+          <div id="floaty" aria-hidden="true"></div>
+        </div>
+
+        <div class="controls">
+          <button type="button" class="audio-hint" id="audioHint" hidden>🔈 Нажмите здесь или в любом месте страницы, чтобы включить звуки эмодзи</button>
+          <form class="dm-form" id="dmForm" autocomplete="off">
+            <button type="button" class="dm-color" id="dmColor" aria-label="Цвет летающего комментария" title="Цвет комментария"><i></i></button>
+            <input id="dmInput" maxlength="100" placeholder="Летящий комментарий поверх видео…" enterkeyhint="send">
+            <button class="btn primary small" aria-label="Отправить летящий комментарий">➤</button>
+          </form>
+          <div class="quick" id="quick"></div>
+          <div class="tools">
+            <button type="button" class="ico" id="btnEmoji" title="Все эмодзи" aria-label="Все эмодзи">😊</button>
+            <button type="button" class="ico" id="btnSound" title="Звуки эмодзи" aria-label="Звуки эмодзи" aria-pressed="true">🔊</button>
+            <button type="button" class="ico" id="btnDm" title="Летающие комментарии" aria-label="Летающие комментарии" aria-pressed="true">💬</button>
+            <button type="button" class="ico" id="btnSettings" title="Настройки" aria-label="Настройки">⚙️</button>
+            <button type="button" class="ico" id="btnFs" title="Полный экран" aria-label="Полный экран">⛶</button>
+          </div>
+
+          <div class="pop" id="emojiPop" hidden>
+            <input type="search" id="emojiSearch" placeholder="Поиск эмодзи: смех, огонь, heart…" autocomplete="off">
+            <div class="cats"></div>
+            <div class="etitle"></div>
+            <div class="egrid"></div>
+            <p class="hint">Точка в углу значит, что у эмодзи есть звук.</p>
+          </div>
+
+          <div class="pop" id="settingsPop" hidden>
+            <h4>Звуки эмодзи</h4>
+            <label class="switch"><input type="checkbox" data-s="sound"> Включить звуки у меня</label>
+            <div class="row"><label for="s-volume">Громкость</label><input type="range" id="s-volume" data-s="volume" min="0" max="1" step="0.05"><output></output></div>
+            <div class="row"><button type="button" class="btn small" id="soundTest">Проверить звук</button></div>
+            <p class="hint" id="soundHint"></p>
+            <h4>Летающие комментарии</h4>
+            <label class="switch"><input type="checkbox" data-s="danmaku"> Показывать поверх видео</label>
+            <label class="switch"><input type="checkbox" data-s="dmChat"> Сообщения чата тоже летают</label>
+            <div class="row"><label for="s-dmSpeed">Скорость</label><input type="range" id="s-dmSpeed" data-s="dmSpeed" min="0.5" max="2" step="0.1"><output></output></div>
+            <div class="row"><label for="s-dmSize">Размер текста</label><input type="range" id="s-dmSize" data-s="dmSize" min="14" max="40" step="1"><output></output></div>
+            <div class="row"><label for="s-dmOpacity">Прозрачность</label><input type="range" id="s-dmOpacity" data-s="dmOpacity" min="0.2" max="1" step="0.05"><output></output></div>
+            <div class="row"><label for="s-dmDensity">Плотность</label><input type="range" id="s-dmDensity" data-s="dmDensity" min="0.2" max="1" step="0.05"><output></output></div>
+            <h4>Реакции</h4>
+            <label class="switch"><input type="checkbox" data-s="reactions"> Показывать плавающие эмодзи</label>
+            <p class="hint">Если выключить звуки или реакции, эмодзи всё равно отправляются друзьям.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="now" id="now"></div>
+
+      <div class="source-bar">
+        <form id="urlForm">
+          <div id="urlWrap">
+            <input id="urlInput" placeholder="Ссылка: YouTube, Vimeo, RuTube, .mp4 / .m3u8, tapeop.dev" autocomplete="off">
+            <span id="urlBadge" hidden></span>
+          </div>
+          <button class="btn primary">Включить</button>
+        </form>
+        <label class="btn">Файл с компьютера<input type="file" id="fileInput" accept="video/*" hidden></label>
+        <button type="button" class="btn" id="srcBtn" aria-label="Какие источники поддерживаются">Источники ▾</button>
+        <div class="pop" id="srcPop" hidden>
+          <h4>Что и как синхронизируется</h4>
+          <table class="src-table">
+            <tr><td>YouTube</td><td>Полностью: play, пауза, перемотка</td></tr>
+            <tr><td>Vimeo</td><td>Полностью (официальный Player SDK)</td></tr>
+            <tr><td>RuTube</td><td>Полностью, если плеер отвечает на команды. Если нет, через 10 с включится ручной режим</td></tr>
+            <tr><td>.mp4 / .webm / .m3u8</td><td>Полностью. Сайт-источник должен разрешать загрузку из браузера (CORS), для .m3u8 это обязательно</td></tr>
+            <tr><td>Файл</td><td>Полностью: у каждого свой экземпляр того же файла, передаётся только время</td></tr>
+            <tr><td>tapeop.dev</td><td>Встроенная страница: управлять её плеером снаружи нельзя, поэтому синхронизация ручная (кнопка «Старт вместе»)</td></tr>
+          </table>
+        </div>
+      </div>
+      <div class="recent" id="recent" hidden></div>
+    </section>
+
+    <aside class="side">
+      <div class="viewers">
+        <h3>Смотрят сейчас: <span id="count">0</span></h3>
+        <div id="userList"></div>
+      </div>
+      <div class="chat">
+        <div id="msgs"></div>
+        <form id="chatForm">
+          <input id="chatInput" maxlength="400" placeholder="Написать в чат…" autocomplete="off" enterkeyhint="send">
+          <button class="btn primary" aria-label="Отправить">→</button>
+        </form>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<div class="modal" id="profile" hidden role="dialog" aria-modal="true" aria-labelledby="profTitle">
+  <div class="card">
+    <h3 id="profTitle">Профиль</h3>
+    <label>Имя
+      <input id="profName" maxlength="24" autocomplete="nickname">
+    </label>
+    <div class="ava-big"><span id="profPreview"></span>
+      <label class="btn small">Загрузить своё фото<input type="file" id="profFile" accept="image/png,image/jpeg,image/webp,image/gif" hidden></label>
+    </div>
+    <p class="hint">PNG, JPEG, WebP или GIF до 5 МБ. Картинка сожмётся до квадрата 96×96 прямо в браузере, на сервер уйдёт только маленькая копия (до 32 КБ), которая живёт, пока вы в комнате.</p>
+    <div class="ava-grid" id="profGrid"></div>
+    <div class="actions">
+      <button type="button" class="btn" id="profCancel">Отмена</button>
+      <button type="button" class="btn primary" id="profSave">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="/js/util.js" defer></script>
+<script src="/js/players.js" defer></script>
+<script src="/js/audio.js" defer></script>
+<script src="/js/danmaku.js" defer></script>
+<script src="/js/emoji.js" defer></script>
+<script src="/js/app.js" defer></script>
+</body>
+</html>

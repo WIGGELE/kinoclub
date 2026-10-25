@@ -1,0 +1,17 @@
+{
+  "name": "kinoclub",
+  "version": "2.0.0",
+  "description": "Совместный просмотр видео с друзьями: синхронный плеер, чат, летающие комментарии, реакции со звуками и аватарки",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/protocol.test.js",
+    "check-embed": "node scripts/check-embed.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
