@@ -1,12 +1,13 @@
 'use strict';
 // Адаптеры плееров. Общий интерфейс:
-//   { caps:{control}, time(), playing(), play(), pause(), seek(t), nudge?(drift), destroy() }
+//   { caps:{control}, tol?, time(), playing(), play(), pause(), seek(t), nudge?(drift), destroy() }
+// tol: на сколько секунд плеер «грубее» обычного (VK отдаёт время целыми секундами)
 // hooks: { host, emit(action,t), suppressed(), toast(text), onReady(p), manual(on, why) }
 (function () {
   const KC = window.KC;
   const HLS_URL = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js';
   const VIMEO_API = 'https://player.vimeo.com/api/player.js';
-  const IFRAME_SANDBOX = 'allow-scripts allow-same-origin allow-presentation allow-forms allow-popups allow-popups-to-escape-sandbox';
+  const VK_HOSTS = ['vk.ru', 'vk.com']; // официальный скрипт API лежит на vk.ru; vk.com как запасной
   const loaded = new Map();
 
   KC.loadScript = (src) => {
@@ -168,13 +169,17 @@
     return p;
   }
 
-  /* ---------- RuTube (postMessage API) ---------- */
-  // Работает как управляемый плеер, только если страница RuTube реально отвечает на команды.
-  // Если за 10 секунд не пришло ни одного события, честно переключаемся на ручную синхронизацию.
-  function makeRutube(id, h) {
-    const frame = makeFrame(h.host, `https://rutube.ru/play/embed/${id}`, 'autoplay; encrypted-media; picture-in-picture');
-    let playing = false, t = 0, tAt = performance.now(), heard = false, dead = false;
+  /* ---------- RuTube (postMessage API, rutube/RutubePlayerJSAPI) ---------- */
+  // Команды: player:play, player:pause, player:setCurrentTime {time}.
+  // События: player:ready, player:changeState {state: playing|paused|stopped|...}, player:currentTime {time},
+  // player:rollState {state: play|complete} (реклама). Если за 10 секунд не пришло ни одного события,
+  // честно переключаемся на ручную синхронизацию.
+  function makeRutube(src, h) {
+    const q = src.p ? `?p=${encodeURIComponent(src.p)}` : '';
+    const frame = makeFrame(h.host, `https://rutube.ru/play/embed/${src.id}${q}`, 'autoplay; encrypted-media; picture-in-picture; fullscreen');
+    let playing = false, t = 0, tAt = performance.now(), heard = false, dead = false, ad = false;
     const cur = () => (playing ? t + (performance.now() - tAt) / 1000 : t);
+    const set = (sec) => { t = sec; tAt = performance.now(); };
     const post = (type, data = {}) => { try { frame.contentWindow.postMessage(JSON.stringify({ type, data }), '*'); } catch {} };
     const p = {
       caps: { control: true },
@@ -182,8 +187,8 @@
       playing: () => playing,
       play: () => post('player:play'),
       pause: () => post('player:pause'),
-      seek: (s) => { t = s; tAt = performance.now(); post('player:setCurrentTime', { time: s }); },
-      destroy() { dead = true; window.removeEventListener('message', onMsg); clearTimeout(watch); frame.remove(); },
+      seek: (s) => { set(s); post('player:setCurrentTime', { time: s }); },
+      destroy() { dead = true; window.removeEventListener('message', onMsg); clearTimeout(watch); post('player:remove'); frame.remove(); },
     };
     function onMsg(e) {
       if (e.source !== frame.contentWindow) return;
@@ -192,13 +197,17 @@
       if (!m || typeof m.type !== 'string' || !m.type.startsWith('player:')) return;
       if (!heard) { heard = true; clearTimeout(watch); h.onReady(p); }
       const d = m.data || {};
+      if (m.type === 'player:rollState') { ad = d.state === 'play'; return; } // во время рекламы ничего не синхронизируем
+      if (ad) return;
       if (m.type === 'player:currentTime' && isFinite(d.time)) {
-        const jump = Math.abs(d.time - cur()) > 2;
-        t = d.time; tAt = performance.now();
+        // перемотка пользователем: время «прыгнуло» относительно того, что мы ожидали
+        const jump = Math.abs(d.time - cur()) > 1.5;
+        set(d.time);
         if (jump && !h.suppressed()) h.emit('seek', t);
       } else if (m.type === 'player:changeState') {
+        if (d.state !== 'playing' && d.state !== 'paused') return; // stopped, lockScreen... не про play/pause
         const now = d.state === 'playing';
-        if (now !== playing) { playing = now; tAt = performance.now(); h.emit(now ? 'play' : 'pause', cur()); }
+        if (now !== playing) { const at = cur(); playing = now; set(at); h.emit(now ? 'play' : 'pause', at); }
       }
     }
     window.addEventListener('message', onMsg);
@@ -210,20 +219,60 @@
     return p;
   }
 
-  /* ---------- встраиваемая страница (tapeop.dev и т. п.) ---------- */
-  // Мы не знаем протокола управления чужим плеером и не изображаем его: только ручная синхронизация.
-  function makeEmbed(url, h) {
-    const frame = makeFrame(h.host, url, 'autoplay; encrypted-media; picture-in-picture; fullscreen', IFRAME_SANDBOX);
-    h.manual(true, 'embed');
-    return {
-      caps: { control: false },
-      time: () => 0, playing: () => false, play() {}, pause() {}, seek() {},
-      destroy() { frame.remove(); },
+  /* ---------- VK Видео (официальный JS API: VK.VideoPlayer, dev.vk.ru/ru/widgets/video) ---------- */
+  // Нужен параметр js_api=1 в адресе плеера. Время VK отдаёт целыми секундами (tol: 1).
+  // Если скрипт API не загрузился или плеер за 15 секунд не ответил, включается ручной режим.
+  function makeVK(src, h) {
+    let dead = false, vp = null, frame = null, heard = false, ad = false, playing = false, t = 0, tAt = performance.now(), watch = null;
+    const cur = () => (playing ? t + (performance.now() - tAt) / 1000 : t);
+    const set = (sec) => { if (isFinite(sec)) { t = sec; tAt = performance.now(); } };
+    const p = {
+      caps: { control: true },
+      tol: 1,
+      time: cur,
+      playing: () => playing,
+      play() { try { vp && vp.play(); } catch {} },
+      pause() { try { vp && vp.pause(); } catch {} },
+      seek(s) { set(s); try { vp && vp.seek(s); } catch {} },
+      destroy() { dead = true; clearTimeout(watch); try { vp && vp.destroy(); } catch {} if (frame) frame.remove(); },
     };
+    const giveUp = () => { if (dead || heard) return; p.caps.control = false; h.manual(true, 'vk'); };
+    const query = `oid=${src.oid}&id=${src.id}${src.h ? '&hash=' + src.h : ''}&hd=2&js_api=1`;
+    (async () => {
+      let host = null;
+      for (const hh of VK_HOSTS) {
+        try { await KC.loadScript(`https://${hh}/js/api/videoplayer.js`); } catch { continue; }
+        if (window.VK && VK.VideoPlayer) { host = hh; break; }
+      }
+      if (dead) return;
+      if (!host) return giveUp();
+      // сначала плеер API, потом iframe: так событие inited не пропустится
+      frame = makeFrame(h.host, `https://${host}/video_ext.php?${query}`, 'autoplay; encrypted-media; fullscreen; picture-in-picture');
+      try { vp = VK.VideoPlayer(frame); } catch { return giveUp(); }
+      const heardIt = () => { if (!heard) { heard = true; clearTimeout(watch); h.onReady(p); } };
+      const on = (ev, fn) => vp.on(ev, (st) => { if (dead) return; heardIt(); fn(st || {}); });
+      on('inited', () => {});
+      on('adStarted', () => { ad = true; });
+      on('adCompleted', () => { ad = false; });
+      const start = (st) => { if (ad) return; set(st.time); playing = true; h.emit('play', cur()); };
+      on('started', start);
+      on('resumed', start);
+      on('paused', (st) => { if (ad) return; set(st.time); playing = false; h.emit('pause', cur()); });
+      on('ended', (st) => { set(st.time); playing = false; });
+      on('timeupdate', (st) => {
+        if (ad || !isFinite(st.time)) return;
+        const jump = Math.abs(st.time - cur()) > 2.5; // время целое, поэтому порог больше
+        set(st.time);
+        if (jump && !h.suppressed()) h.emit('seek', st.time);
+      });
+      on('error', () => h.toast('VK Видео не смогло открыть это видео (возможно, оно закрытое или встраивание запрещено)'));
+      watch = setTimeout(giveUp, 15000);
+    })();
+    return p;
   }
 
   /* ---------- разбор ссылок ---------- */
-  KC.parseSource = (raw, embedHosts) => {
+  KC.parseSource = (raw) => {
     const s = String(raw || '').trim();
     if (!s) return null;
     const yt = s.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/))([\w-]{11})/);
@@ -244,11 +293,29 @@
     }
     if (host === 'rutube.ru' || host.endsWith('.rutube.ru')) {
       const m = u.pathname.match(/\/([a-f0-9]{32})(?:\/|$)/i);
-      if (m) return { type: 'rutube', id: m[1].toLowerCase() };
+      if (m) {
+        const o = { type: 'rutube', id: m[1].toLowerCase() };
+        const key = u.searchParams.get('p');
+        if (key && /^[\w-]{6,64}$/.test(key)) o.p = key;
+        return o;
+      }
     }
-    if ((embedHosts || []).some((e) => host === e || host.endsWith('.' + e))) {
-      u.protocol = 'https:';
-      return { type: 'embed', url: u.href };
+    if (/^(m\.)?(vk\.com|vk\.ru|vkvideo\.ru)$/.test(host)) {
+      // ссылка на страницу (video-123_456, в том числе внутри ?z=) или код встраивания (video_ext.php?oid=&id=&hash=)
+      const q = u.searchParams;
+      if (/^\/video_ext\.php/.test(u.pathname) && /^-?\d{1,12}$/.test(q.get('oid') || '') && /^\d{1,12}$/.test(q.get('id') || '')) {
+        const o = { type: 'vk', oid: q.get('oid'), id: q.get('id') };
+        if (/^[a-f0-9]{6,32}$/i.test(q.get('hash') || '')) o.h = q.get('hash');
+        return o;
+      }
+      let dec = u.pathname + '?' + u.search;
+      try { dec = decodeURIComponent(dec); } catch {}
+      const m = dec.match(/video(-?\d{1,12})_(\d{1,12})(?:_([a-f0-9]{6,32}))?/i);
+      if (m) {
+        const o = { type: 'vk', oid: m[1], id: m[2] };
+        if (m[3]) o.h = m[3];
+        return o;
+      }
     }
     return { type: 'url', url: s };
   };
@@ -259,18 +326,26 @@
       case 'yt': return { name: 'YouTube', sync: 'full' };
       case 'vimeo': return { name: 'Vimeo', sync: 'full' };
       case 'rutube': return { name: 'RuTube', sync: 'full' };
-      case 'embed': return { name: new URL(src.url).hostname, sync: 'manual' };
+      case 'vk': return { name: 'VK Видео', sync: 'full' };
       case 'file': return { name: 'Файл ' + src.name, sync: 'full' };
       default: return { name: /\.m3u8(\?|#|$)/i.test(src.url) ? 'Поток HLS' : 'Прямая ссылка', sync: 'full' };
     }
+  };
+
+  // Обычная ссылка на источник (для «Открыть отдельно» в ручном режиме)
+  KC.sourceLink = (src) => {
+    if (!src) return '';
+    if (src.type === 'rutube') return `https://rutube.ru/video/${src.id}/` + (src.p ? `?p=${encodeURIComponent(src.p)}` : '');
+    if (src.type === 'vk') return `https://vk.com/video${src.oid}_${src.id}` + (src.h ? `_${src.h}` : '');
+    return '';
   };
 
   KC.createPlayer = (src, h, fileUrl) => {
     switch (src.type) {
       case 'yt': return makeYT(src.id, h);
       case 'vimeo': return makeVimeo(src, h);
-      case 'rutube': return makeRutube(src.id, h);
-      case 'embed': return makeEmbed(src.url, h);
+      case 'rutube': return makeRutube(src, h);
+      case 'vk': return makeVK(src, h);
       case 'file': return makeVideo(fileUrl, h);
       default: return makeVideo(src.url, h);
     }

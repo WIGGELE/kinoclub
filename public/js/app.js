@@ -11,7 +11,6 @@
   let myFile = null, myFileUrl = null;
   let suppressUntil = 0;
   let known = { playing: false, time: 0, at: Date.now() };
-  let embedHosts = ['tapeop.dev'];
   let dmColor = Math.min(7, Math.max(0, Number(KC.store.get('kc_dmcolor', 0)) | 0));
   const users = new Map();
 
@@ -175,7 +174,6 @@
         connected = true;
         inRoom = true;
         retries = 0;
-        embedHosts = m.embedHosts || embedHosts;
         setConn(true);
         setConnecting(false);
         $('#landing').hidden = true;
@@ -251,7 +249,7 @@
     const diff = player.time() - target;
     const ad = Math.abs(diff);
     const soft = isSync && s.playing && !!player.nudge;
-    const needSeek = ad > (s.playing ? (soft ? 2 : 1.2) : 0.4);
+    const needSeek = ad > (s.playing ? (soft ? 2 : 1.2) : 0.4) + (player.tol || 0); // tol: плеер с целыми секундами (VK)
     const needPlay = s.playing && !player.playing();
     const needPause = !s.playing && player.playing();
     if (!needSeek && !needPlay && !needPause) {
@@ -303,12 +301,12 @@
     manualWhy = why || '';
     const banner = $('#manualBanner');
     if (!on) { banner.hidden = true; return updateNow(); }
-    $('#manualText').textContent = why === 'rutube'
-      ? 'RuTube не ответил на команды управления, поэтому play, пауза и перемотка не синхронизируются. Договоритесь голосом: нажмите «Старт вместе» и жмите play на нуле.'
-      : 'Этот источник встроен как обычная страница: сайт не даёт управлять своим плеером, поэтому пауза и перемотка не синхронизируются. Нажмите «Старт вместе»: у всех пойдёт отсчёт 3-2-1, и каждый жмёт play. Если окно пустое, сайт запрещает встраивание.';
+    const name = why === 'vk' ? 'VK Видео' : 'RuTube';
+    $('#manualText').textContent = `${name} не ответил на команды управления, поэтому play, пауза и перемотка сейчас не синхронизируются. Нажмите «Старт вместе»: у всех пойдёт отсчёт 3-2-1, и каждый жмёт play. Иногда помогает отключить блокировщик рекламы и защиту от отслеживания для этого сайта, затем обновить страницу.`;
     const a = $('#openTab');
-    a.hidden = !(source && source.url && /^https:/.test(source.url));
-    if (!a.hidden) a.href = source.url;
+    const link = KC.sourceLink(source);
+    a.hidden = !link;
+    if (link) a.href = link;
     banner.hidden = false;
     updateNow();
   }
@@ -371,7 +369,7 @@
     $('#urlInput').style.paddingRight = text ? Math.max(70, text.length * 7 + 24) + 'px' : '';
   }
   $('#urlInput').addEventListener('input', () => {
-    const src = KC.parseSource($('#urlInput').value, embedHosts);
+    const src = KC.parseSource($('#urlInput').value);
     if (!$('#urlInput').value.trim()) return showBadge('');
     if (!src) return showBadge('не ссылка', true);
     const d = KC.describeSource(src);
@@ -380,7 +378,7 @@
   });
   $('#urlForm').onsubmit = (e) => {
     e.preventDefault();
-    const src = KC.parseSource($('#urlInput').value, embedHosts);
+    const src = KC.parseSource($('#urlInput').value);
     if (!src) return toast('Нужна ссылка, начинающаяся с http:// или https://');
     if (src.type === 'url' && location.protocol === 'https:' && /^http:/i.test(src.url)) {
       return toast('Сайт открыт по https, поэтому ссылка на видео тоже должна быть https');
@@ -415,9 +413,9 @@
       b.type = 'button';
       b.className = 'chip';
       const d = KC.describeSource(s);
-      const tail = s.url ? s.url.replace(/^https?:\/\/(www\.)?/, '') : s.id;
+      const tail = s.url ? s.url.replace(/^https?:\/\/(www\.)?/, '') : s.type === 'vk' ? `${s.oid}_${s.id}` : s.id;
       b.textContent = `${d.name}: ${tail}`;
-      b.title = s.url || s.id;
+      b.title = s.url || tail;
       b.onclick = () => { if (!sameSrc(s, source)) send({ type: 'setSource', source: s }); };
       return b;
     });

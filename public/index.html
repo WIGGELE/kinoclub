@@ -29,7 +29,7 @@
     </form>
     <ol class="steps">
       <li>Создайте комнату и отправьте ссылку друзьям</li>
-      <li>Вставьте ссылку на видео (YouTube, Vimeo, RuTube, mp4, tapeop.dev) или выберите файл</li>
+      <li>Вставьте ссылку на видео (YouTube, VK Видео, RuTube, Vimeo, mp4) или выберите файл</li>
       <li>Нажмите play, и все смотрят одновременно</li>
     </ol>
   </div>
@@ -119,7 +119,7 @@
       <div class="source-bar">
         <form id="urlForm">
           <div id="urlWrap">
-            <input id="urlInput" placeholder="Ссылка: YouTube, Vimeo, RuTube, .mp4 / .m3u8, tapeop.dev" autocomplete="off">
+            <input id="urlInput" placeholder="Ссылка: YouTube, VK Видео, RuTube, Vimeo, .mp4" autocomplete="off">
             <span id="urlBadge" hidden></span>
           </div>
           <button class="btn primary">Включить</button>
@@ -130,11 +130,12 @@
           <h4>Что и как синхронизируется</h4>
           <table class="src-table">
             <tr><td>YouTube</td><td>Полностью: play, пауза, перемотка</td></tr>
+            <tr><td>VK Видео</td><td>Полностью (официальный JS API VK). Время VK отдаёт целыми секундами, поэтому точность около секунды. Закрытые видео и видео с запретом встраивания не откроются</td></tr>
             <tr><td>Vimeo</td><td>Полностью (официальный Player SDK)</td></tr>
-            <tr><td>RuTube</td><td>Полностью, если плеер отвечает на команды. Если нет, через 10 с включится ручной режим</td></tr>
+            <tr><td>RuTube</td><td>Полностью (postMessage API плеера)</td></tr>
             <tr><td>.mp4 / .webm / .m3u8</td><td>Полностью. Сайт-источник должен разрешать загрузку из браузера (CORS), для .m3u8 это обязательно</td></tr>
             <tr><td>Файл</td><td>Полностью: у каждого свой экземпляр того же файла, передаётся только время</td></tr>
-            <tr><td>tapeop.dev</td><td>Встроенная страница: управлять её плеером снаружи нельзя, поэтому синхронизация ручная (кнопка «Старт вместе»)</td></tr>
+            <tr><td colspan="2" class="hint">Если RuTube или VK не ответят на команды управления, сайт честно переключится на ручную синхронизацию («Старт вместе»).</td></tr>
           </table>
         </div>
       </div>

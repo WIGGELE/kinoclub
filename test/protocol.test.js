@@ -57,7 +57,6 @@ test('join, init и список пользователей', async () => {
   assert.equal(init.type, 'init');
   assert.equal(init.users[0].av, 'p3');
   assert.equal(init.you, 'aaaaaaaa1');
-  assert.ok(init.embedHosts.includes('tapeop.dev'));
   const b = client('TEST1'); await b.join('Боря', { cid: 'bbbbbbbb1' });
   const users = await a.next((m) => m.type === 'users' && m.users.length === 2);
   assert.equal(users.users.length, 2);
@@ -150,7 +149,8 @@ test('источники: допустимые и запрещённые', async
     { type: 'yt', id: 'dQw4w9WgXcQ' }, { type: 'vimeo', id: '76979871', h: 'abcdef123456' },
     { type: 'rutube', id: 'a'.repeat(32) }, { type: 'url', url: 'https://x.test/v.mp4' },
     { type: 'url', url: 'https://x.test/live.m3u8' },
-    { type: 'embed', url: 'https://tapeop.dev/watch/123' }, { type: 'embed', url: 'https://www.tapeop.dev/x' },
+    { type: 'rutube', id: 'b'.repeat(32), p: 'abcDEF123_-xyz' },
+    { type: 'vk', oid: '-22822305', id: '456241864' }, { type: 'vk', oid: '123', id: '456', h: 'e7bac5dc7167d152' },
   ];
   for (const src of ok) {
     a.send({ type: 'setSource', source: src });
@@ -159,8 +159,8 @@ test('источники: допустимые и запрещённые', async
     await sleep(1100); // бакет setSource: 1/с
   }
   const bad = [
-    { type: 'embed', url: 'https://evil.example/x' }, { type: 'embed', url: 'http://tapeop.dev/x' },
-    { type: 'embed', url: 'https://tapeop.dev.evil.example/x' }, { type: 'embed', url: 'https://user:pw@tapeop.dev/x' },
+    { type: 'embed', url: 'https://tapeop.dev/x' }, { type: 'embed', url: 'https://evil.example/x' },
+    { type: 'vk', oid: 'abc', id: '1' }, { type: 'vk', oid: '1', id: '2x' }, { type: 'vk', oid: 1, id: 2 },
     { type: 'url', url: 'javascript:alert(1)' }, { type: 'yt', id: 'short' }, { type: 'vimeo', id: 'abc' },
     { type: 'rutube', id: 'zz' }, { type: 'x' }, null, 'str',
   ];
@@ -171,6 +171,17 @@ test('источники: допустимые и запрещённые', async
   const b = client('SRC1'); const init = await b.join('B', { cid: 'srcBBBBBBB' });
   assert.ok(init.recent.length >= 1 && init.recent.length <= 6);
   [a, b].forEach((x) => x.ws.close());
+});
+
+test('источники: мусорный ключ h/p отбрасывается, а не попадает в комнату', async () => {
+  const a = client('SRC2'); await a.join('A', { cid: 'srcCCCCCCC' });
+  a.send({ type: 'setSource', source: { type: 'vk', oid: '1', id: '2', h: '<script>' } });
+  const m = await a.next((x) => x.type === 'source');
+  assert.deepEqual(m.source, { type: 'vk', oid: '1', id: '2' });
+  await sleep(1100);
+  a.send({ type: 'setSource', source: { type: 'rutube', id: 'c'.repeat(32), p: '<b>' } });
+  assert.deepEqual((await a.next((x) => x.type === 'source')).source, { type: 'rutube', id: 'c'.repeat(32) });
+  a.ws.close();
 });
 
 test('аватарки: проверка содержимого, выдача по HTTP', async () => {
