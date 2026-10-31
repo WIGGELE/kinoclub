@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Киноклуб</title>
+<style>
+:root{
+  --bg:#0e0c10; --panel:#17141b; --panel2:#201c27; --line:#2d2835;
+  --text:#f3eee7; --muted:#9d96a6; --accent:#ffb347; --accent-ink:#2a1a00; --danger:#ff5a5f;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button,input{font:inherit;color:inherit}
+input{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%;outline:none}
+input:focus{border-color:var(--accent)}
+.btn{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 16px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.btn.primary:hover{filter:brightness(1.08)}
+
+/* Вход */
+#landing{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
+  background:radial-gradient(900px 500px at 50% -10%,#3a2410 0%,transparent 70%)}
+.card{width:100%;max-width:420px;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:28px}
+.logo{font-size:34px;font-weight:800;letter-spacing:-.02em;color:var(--accent)}
+.tag{color:var(--muted);margin:6px 0 22px}
+.card label{display:block;color:var(--muted);font-size:13px;margin-bottom:14px}
+.card label input{margin-top:6px;color:var(--text);font-size:15px}
+.card .btn.primary{width:100%;padding:12px}
+.or{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:13px;margin:18px 0}
+.or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
+#joinForm{display:flex;gap:8px}
+#codeInput{text-transform:uppercase;letter-spacing:.12em}
+.steps{margin:22px 0 0;padding:0;list-style:none;color:var(--muted);font-size:13px;counter-reset:s}
+.steps li{counter-increment:s;display:flex;gap:10px;margin-top:8px}
+.steps li::before{content:counter(s);flex:none;width:20px;height:20px;border-radius:50%;background:var(--panel2);color:var(--accent);font-size:12px;display:grid;place-items:center}
+
+/* Комната */
+.top{height:56px;display:flex;align-items:center;gap:14px;padding:0 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+.top .brand{font-weight:800;color:var(--accent);font-size:18px}
+.top .code{color:var(--muted)}
+.top .code b{color:var(--text);letter-spacing:.14em;margin-left:4px}
+.top .spacer{flex:1}
+.conn{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:13px}
+.conn::before{content:"";width:8px;height:8px;border-radius:50%;background:#4ade80}
+.conn.off::before{background:var(--danger)}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;padding:16px;height:calc(100vh - 56px)}
+.stage-col{min-width:0;overflow:auto;display:flex;flex-direction:column;gap:12px}
+.stage{position:relative;aspect-ratio:16/9;width:100%;max-height:calc(100vh - 56px - 32px - 130px);background:#000;border-radius:14px;overflow:hidden;margin:0 auto}
+#playerHost,#playerHost video,#playerHost iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000}
+.empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:24px;
+  background:radial-gradient(600px 300px at 50% 0%,#2a1c10 0%,#0b090d 70%)}
+.empty h2{margin:0;font-size:22px}
+.empty p{margin:0;color:var(--muted);max-width:420px}
+.empty .btn{margin-top:6px}
+.source-bar{display:flex;gap:8px;flex-wrap:wrap}
+#urlForm{display:flex;gap:8px;flex:1;min-width:260px}
+.now{color:var(--muted);font-size:13px;min-height:18px}
+.reactions{display:flex;gap:8px;flex-wrap:wrap}
+.reactions button{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:20px;cursor:pointer;line-height:1}
+.reactions button:hover{border-color:var(--accent);transform:translateY(-1px)}
+#floaty{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.float{position:absolute;bottom:8%;font-size:34px;animation:rise 2.6s ease-out forwards}
+@keyframes rise{0%{transform:translateY(0) scale(.6);opacity:0}15%{opacity:1;transform:translateY(-30px) scale(1)}100%{transform:translateY(-260px) scale(1.2);opacity:0}}
+
+.side{display:flex;flex-direction:column;gap:12px;min-height:0}
+.viewers,.chat{background:var(--panel);border:1px solid var(--line);border-radius:14px}
+.viewers{padding:12px 14px}
+.viewers h3{margin:0 0 8px;font-size:13px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+#userList{display:flex;flex-wrap:wrap;gap:8px}
+.user{display:flex;align-items:center;gap:6px;font-size:13px;background:var(--panel2);border-radius:999px;padding:3px 10px 3px 3px}
+.ava{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;color:#111}
+.chat{flex:1;min-height:0;display:flex;flex-direction:column}
+#msgs{flex:1;overflow:auto;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.msg{word-break:break-word}
+.msg b{margin-right:6px}
+.sys{color:var(--muted);font-size:13px;text-align:center}
+#chatForm{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line)}
+#chatForm .btn{padding:10px 14px}
+
+/* Нужен файл */
+.need{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:24px;background:rgba(10,8,12,.92)}
+.need code{background:var(--panel2);padding:2px 8px;border-radius:6px;word-break:break-all}
+
+#toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#2a2431;border:1px solid var(--line);padding:10px 16px;border-radius:12px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:10;max-width:90vw;text-align:center}
+#toast.show{opacity:1}
+
+@media (max-width:900px){
+  .layout{grid-template-columns:1fr;height:auto}
+  .stage{max-height:none}
+  .chat{height:360px;flex:none}
+  .top .code{display:none}
+}
+</style>
+</head>
+<body>
+
+<div id="landing">
+  <div class="card">
+    <div class="logo">Киноклуб</div>
+    <p class="tag">Смотрите видео вместе, где бы вы ни были. Пауза и перемотка у всех синхронны, рядом чат и реакции.</p>
+    <label>Как вас зовут?
+      <input id="nameInput" maxlength="24" placeholder="Например, Аня" autocomplete="nickname">
+    </label>
+    <button class="btn primary" id="createBtn">Создать комнату</button>
+    <div class="or">или войти по коду</div>
+    <form id="joinForm">
+      <input id="codeInput" maxlength="12" placeholder="Код комнаты" autocapitalize="characters" autocomplete="off">
+      <button class="btn">Войти</button>
+    </form>
+    <ol class="steps">
+      <li>Создайте комнату и отправьте ссылку друзьям</li>
+      <li>Вставьте ссылку на YouTube или видео, либо выберите файл (у всех должен быть один и тот же)</li>
+      <li>Нажмите play, и все смотрят одновременно</li>
+    </ol>
+  </div>
+</div>
+
+<div id="room" hidden>
+  <header class="top">
+    <div class="brand">Киноклуб</div>
+    <div class="code">Комната <b id="roomCode"></b></div>
+    <div class="spacer"></div>
+    <span class="conn" id="conn">онлайн</span>
+    <button class="btn" id="copyBtn">Скопировать ссылку</button>
+  </header>
+  <main class="layout">
+    <section class="stage-col">
+      <div class="stage" id="stage">
+        <div id="playerHost"></div>
+        <div class="empty" id="empty">
+          <h2>Что смотрим?</h2>
+          <p>Вставьте ссылку на YouTube или на видеофайл ниже. Либо выберите файл с компьютера: тот же файл должен быть у друзей.</p>
+        </div>
+        <div class="need" id="need" hidden>
+          <h2 style="margin:0">Выберите тот же файл</h2>
+          <div>Друзья включили файл <code id="needName"></code></div>
+          <label class="btn primary">Выбрать файл<input type="file" id="needInput" accept="video/*" hidden></label>
+        </div>
+        <div id="floaty"></div>
+      </div>
+      <div class="now" id="now"></div>
+      <div class="source-bar">
+        <form id="urlForm">
+          <input id="urlInput" placeholder="Ссылка на YouTube или прямая ссылка на .mp4 / .webm" autocomplete="off">
+          <button class="btn primary">Включить</button>
+        </form>
+        <label class="btn">Файл с компьютера<input type="file" id="fileInput" accept="video/*" hidden></label>
+      </div>
+      <div class="reactions" id="reactions"></div>
+    </section>
+    <aside class="side">
+      <div class="viewers">
+        <h3>Смотрят сейчас: <span id="count">0</span></h3>
+        <div id="userList"></div>
+      </div>
+      <div class="chat">
+        <div id="msgs"></div>
+        <form id="chatForm">
+          <input id="chatInput" maxlength="400" placeholder="Написать сообщение…" autocomplete="off">
+          <button class="btn primary" aria-label="Отправить">→</button>
+        </form>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+const $ = (s) => document.querySelector(s);
+const EMOJI = ['❤️', '😂', '😮', '👏', '🔥', '😢'];
+
+let ws, roomCode = '', myName = '', myId = '';
+let inRoom = false, connected = false, retryTimer = null;
+let source = null, player = null;
+let myFile = null, myFileUrl = null;
+let suppressUntil = 0;
+let rateLockUntil = 0; // после своей смены скорости не принимаем запоздавшие периодические сообщения со старой
+let lastAutoSeek = 0;  // когда последний раз сами подтягивали позицию по сообщению сервера
+let armed = false;     // плеер уже получил состояние комнаты; до этого смену скорости никому не отправляем
+let known = { playing: false, time: 0, rate: 1, at: Date.now() };
+
+/* ---------- утилиты ---------- */
+let toastTimer;
+function toast(text) {
+  const t = $('#toast');
+  t.textContent = text;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
+}
+function colorFor(name) {
+  let h = 0;
+  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  return `hsl(${h} 70% 70%)`;
+}
+function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
+const suppress = (ms = 1500) => { suppressUntil = Date.now() + ms; };
+const isSuppressed = () => Date.now() < suppressUntil;
+const est = () => known.playing ? known.time + ((Date.now() - known.at) / 1000) * known.rate : known.time;
+function setKnown(playing, time, rate) { known = { playing, time, rate: rate || known.rate || 1, at: Date.now() }; }
+const fmtRate = (r) => '×' + (Math.round(r * 100) / 100);
+
+/* ---------- вход ---------- */
+try { $('#nameInput').value = localStorage.getItem('kc_name') || ''; } catch {}
+const urlRoom = (new URLSearchParams(location.search).get('room') || '').toUpperCase();
+if (urlRoom) { $('#codeInput').value = urlRoom; }
+
+function randomCode() {
+  const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let s = '';
+  for (let i = 0; i < 5; i++) s += abc[Math.floor(Math.random() * abc.length)];
+  return s;
+}
+function enter(code) {
+  const name = $('#nameInput').value.trim();
+  if (!name) { $('#nameInput').focus(); return toast('Сначала введите своё имя'); }
+  if (!/^[A-Z0-9]{3,12}$/.test(code)) { $('#codeInput').focus(); return toast('Код комнаты: 3–12 букв или цифр'); }
+  try { localStorage.setItem('kc_name', name); } catch {}
+  myName = name;
+  roomCode = code;
+  connect();
+}
+$('#createBtn').onclick = () => enter(randomCode());
+$('#joinForm').onsubmit = (e) => { e.preventDefault(); enter($('#codeInput').value.trim().toUpperCase()); };
+
+function connect() {
+  clearTimeout(retryTimer);
+  ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
+  ws.onopen = () => send({ type: 'join', room: roomCode, name: myName });
+  ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } onMsg(m); };
+  ws.onclose = () => {
+    connected = false;
+    if (inRoom) { setConn(false); retryTimer = setTimeout(connect, 2000); }
+  };
+}
+function setConn(on) {
+  const c = $('#conn');
+  c.textContent = on ? 'онлайн' : 'переподключаюсь…';
+  c.classList.toggle('off', !on);
+}
+
+/* ---------- сообщения сервера ---------- */
+function onMsg(m) {
+  switch (m.type) {
+    case 'init':
+      myId = m.you;
+      connected = true;
+      inRoom = true;
+      setConn(true);
+      $('#landing').hidden = true;
+      $('#room').hidden = false;
+      $('#roomCode').textContent = roomCode;
+      history.replaceState(null, '', location.pathname + '?room=' + roomCode);
+      $('#msgs').innerHTML = '';
+      m.history.forEach(addMsg);
+      renderUsers(m.users);
+      setKnown(m.state.playing, m.state.time, m.state.rate);
+      setSourceLocal(m.source);
+      break;
+    case 'users': renderUsers(m.users); break;
+    case 'source':
+      known.rate = 1;
+      setKnown(false, 0, 1);
+      setSourceLocal(m.source);
+      if (m.by) toast(`${m.by} включил(а) новое видео`);
+      break;
+    case 'state':
+      if (m.by) {
+        const t = { play: 'нажал(а) play', pause: 'поставил(а) на паузу', seek: 'перемотал(а)', rate: 'выбрал(а) скорость ' + fmtRate(m.rate) }[m.action];
+        if (t) toast(`${m.by} ${t}`);
+      }
+      applyState(m, 'event');
+      break;
+    case 'sync': applyState(m, 'sync'); break;
+    case 'chat': addMsg(m); break;
+    case 'sys': addSys(m.text); break;
+    case 'reaction': floatEmoji(m.emoji); break;
+    case 'error': toast(m.message); break;
+  }
+}
+
+/* ---------- синхронизация ---------- */
+// kind: 'event' — действие другого участника (или ответ на запрос состояния), 'sync' — периодическая сверка от сервера.
+function applyState(s, kind) {
+  const rate = s.rate || 1;
+  // Периодическое сообщение могло быть отправлено ещё до моей смены скорости: оно вернуло бы старое значение.
+  if (kind === 'sync' && Date.now() < rateLockUntil) return;
+  setKnown(s.playing, s.time, rate);
+  if (!player) return;
+  armed = true;
+  const needRate = Math.abs(player.rate() - rate) > 0.01;
+  const needPlay = s.playing && !player.playing();
+  const needPause = !s.playing && player.playing();
+  // Насколько большое расхождение допустимо без перемотки. Каждая перемотка заставляет плеер заново грузить видео,
+  // поэтому мелкие расхождения не трогаем, а смена скорости позицию вообще не двигает.
+  let tolerance;
+  if (!s.playing) tolerance = kind === 'sync' ? 1 : 0.4;
+  else if (kind === 'sync') tolerance = 3;
+  else if (s.action === 'rate') tolerance = Infinity;
+  else tolerance = 1.5;
+  let needSeek = Math.abs(player.time() - s.time) > tolerance;
+  if (needSeek && kind === 'sync') {
+    if (player.buffering()) needSeek = false; // плеер и так догружается, перемотка только добавит остановок
+    else if (Date.now() - lastAutoSeek < 6000) needSeek = false; // прошлая подстройка ещё не успокоилась
+  }
+  if (!needRate && !needSeek && !needPlay && !needPause) return;
+  suppress();
+  if (needRate) player.setRate(rate);
+  if (needSeek) { player.seek(s.time); if (kind === 'sync') lastAutoSeek = Date.now(); }
+  if (needPlay) player.play();
+  if (needPause) player.pause();
+}
+
+// Локальное действие пользователя -> всем остальным
+function emit(action, t, rate) {
+  // Эхо наших же команд плееру отсекается окном подавления. Для скорости оно не нужно: эхо совпадает
+  // со скоростью комнаты и отбрасывается ниже, а настоящая смена скорости не должна теряться.
+  if (!connected || (action !== 'rate' && isSuppressed())) return;
+  const e = est();
+  // Если комната уже играет, то «play» от плеера это не команда, а возврат из буферизации или запоздавшее событие.
+  // Отправлять его нельзя: оно перезапишет время комнаты нашей (возможно отставшей) позицией.
+  if (action === 'play' && known.playing) return;
+  if (action === 'pause' && !known.playing) return;
+  if (action === 'seek' && Math.abs(t - e) < 1.5) return;
+  if (action === 'rate' && (!armed || Math.abs(rate - known.rate) < 0.01)) return;
+  if (action === 'rate') {
+    // Позицию не передаём: сервер пересчитает время комнаты сам.
+    known = { playing: known.playing, time: e, rate, at: Date.now() };
+    rateLockUntil = Date.now() + 4000;
+  } else {
+    setKnown(action === 'play' || (action === 'seek' && known.playing), t);
+  }
+  const msg = { type: 'control', action, time: t };
+  if (action === 'rate') msg.rate = rate;
+  send(msg);
+}
+
+/* ---------- плееры ---------- */
+function makeVideo(url, onReady) {
+  const v = document.createElement('video');
+  v.controls = true;
+  v.playsInline = true;
+  v.preload = 'auto';
+  v.src = url;
+  $('#playerHost').appendChild(v);
+  // Событие «seeked» после нашей собственной перемотки может прийти позже окна подавления, его не считаем действием пользователя.
+  let selfSeeks = 0, selfSeekTimer = null;
+  const p = {
+    time: () => v.currentTime,
+    playing: () => !v.paused && !v.ended,
+    buffering: () => v.seeking || (!v.paused && v.readyState < 3),
+    play: () => { const r = v.play(); if (r && r.catch) r.catch(() => toast('Браузер заблокировал автозапуск. Нажмите ▶ в плеере')); },
+    pause: () => v.pause(),
+    seek: (t) => {
+      selfSeeks++;
+      clearTimeout(selfSeekTimer);
+      selfSeekTimer = setTimeout(() => { selfSeeks = 0; }, 5000);
+      v.currentTime = t;
+    },
+    rate: () => v.playbackRate,
+    setRate: (r) => { v.playbackRate = r; },
+    destroy() { clearTimeout(selfSeekTimer); v.pause(); v.removeAttribute('src'); v.load(); v.remove(); },
+  };
+  v.addEventListener('loadedmetadata', () => onReady(p), { once: true });
+  v.addEventListener('play', () => emit('play', v.currentTime));
+  v.addEventListener('pause', () => { if (!v.ended) emit('pause', v.currentTime); });
+  v.addEventListener('seeked', () => {
+    if (selfSeeks > 0) { selfSeeks--; return; }
+    emit('seek', v.currentTime);
+  });
+  v.addEventListener('ratechange', () => emit('rate', v.currentTime, v.playbackRate));
+  v.addEventListener('error', () => toast('Не удалось загрузить видео. Проверьте ссылку или формат файла'));
+  return p;
+}
+
+let ytLoading = null;
+function loadYT() {
+  if (ytLoading) return ytLoading;
+  ytLoading = new Promise((res) => {
+    if (window.YT && YT.Player) return res();
+    window.onYouTubeIframeAPIReady = res;
+    const s = document.createElement('script');
+    s.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(s);
+  });
+  return ytLoading;
+}
+function makeYT(id, onReady) {
+  const host = document.createElement('div');
+  host.id = 'yt' + Date.now();
+  $('#playerHost').appendChild(host);
+  let yt = null, ok = false, dead = false, poll = null, last = 0, lastAt = 0;
+  let lastStable = -1; // последнее состояние плеера, кроме буферизации (3)
+  const p = {
+    time: () => (ok ? yt.getCurrentTime() : 0),
+    playing: () => ok && yt.getPlayerState() === 1,
+    buffering: () => ok && yt.getPlayerState() === 3,
+    play: () => ok && yt.playVideo(),
+    pause: () => ok && yt.pauseVideo(),
+    seek: (t) => ok && yt.seekTo(t, true),
+    rate: () => (ok ? yt.getPlaybackRate() : 1),
+    setRate: (r) => ok && yt.setPlaybackRate(r),
+    destroy() { dead = true; clearInterval(poll); try { yt && yt.destroy(); } catch {} host.remove(); },
+  };
+  // Ищем ручную перемотку по скачку позиции. Ожидаемую позицию считаем по реальному времени между проверками
+  // и по текущей скорости; если вкладка была в фоне и проверка запоздала, просто запоминаем позицию.
+  function tick() {
+    const now = performance.now();
+    const t = yt.getCurrentTime();
+    const late = now - lastAt > 1500;
+    const expected = last + (yt.getPlayerState() === 1 ? ((now - lastAt) / 1000) * yt.getPlaybackRate() : 0);
+    if (!late && Math.abs(t - expected) > 1.5 && !isSuppressed()) emit('seek', t);
+    last = t;
+    lastAt = now;
+  }
+  loadYT().then(() => {
+    if (dead) return;
+    yt = new YT.Player(host.id, {
+      videoId: id, width: '100%', height: '100%',
+      playerVars: { playsinline: 1, rel: 0 },
+      events: {
+        onReady() { ok = true; last = yt.getCurrentTime(); lastAt = performance.now(); poll = setInterval(tick, 500); onReady(p); },
+        onStateChange(e) {
+          const s = e.data, prev = lastStable;
+          if (s !== 3) lastStable = s;
+          if (isSuppressed()) return;
+          // «play» шлём только при переходе из паузы или остановки. Возврат из буферизации (играло → 3 → играет) не считается.
+          if (s === 1 && prev !== 1) emit('play', yt.getCurrentTime());
+          else if (s === 2) emit('pause', yt.getCurrentTime());
+        },
+        onPlaybackRateChange(e) {
+          emit('rate', yt.getCurrentTime(), e.data);
+        },
+        onError() { toast('YouTube не смог открыть это видео (возможно, встраивание запрещено)'); },
+      },
+    });
+  });
+  return p;
+}
+
+function destroyPlayer() {
+  armed = false;
+  if (player) { try { player.destroy(); } catch {} player = null; }
+  $('#playerHost').innerHTML = '';
+}
+function onPlayerReady(p) {
+  if (player !== p) return;
+  send({ type: 'needState' });
+}
+
+function setSourceLocal(src, forceFile) {
+  destroyPlayer();
+  source = src;
+  $('#need').hidden = true;
+  $('#empty').hidden = !!src;
+  $('#now').textContent = '';
+  if (!src) return;
+  if (src.type === 'yt') {
+    $('#now').textContent = 'Сейчас: видео с YouTube';
+    player = makeYT(src.id, onPlayerReady);
+  } else if (src.type === 'url') {
+    $('#now').textContent = 'Сейчас: ' + src.url;
+    player = makeVideo(src.url, onPlayerReady);
+  } else if (src.type === 'file') {
+    $('#now').textContent = 'Сейчас: файл ' + src.name;
+    const match = myFile && myFile.name === src.name && myFile.size === src.size;
+    if (myFile && (match || forceFile)) {
+      player = makeVideo(myFileUrl, onPlayerReady);
+    } else {
+      $('#needName').textContent = src.name;
+      $('#need').hidden = false;
+    }
+  }
+}
+
+/* ---------- выбор источника ---------- */
+function parseSource(s) {
+  s = s.trim();
+  const m = s.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/))([\w-]{11})/);
+  if (m) return { type: 'yt', id: m[1] };
+  if (/^https?:\/\//i.test(s)) return { type: 'url', url: s };
+  return null;
+}
+$('#urlForm').onsubmit = (e) => {
+  e.preventDefault();
+  const src = parseSource($('#urlInput').value);
+  if (!src) return toast('Нужна ссылка, начинающаяся с http:// или https://');
+  send({ type: 'setSource', source: src });
+  $('#urlInput').value = '';
+};
+function handleFile(f, announce) {
+  if (!f) return;
+  if (myFileUrl) URL.revokeObjectURL(myFileUrl);
+  myFile = f;
+  myFileUrl = URL.createObjectURL(f);
+  if (announce) {
+    send({ type: 'setSource', source: { type: 'file', name: f.name, size: f.size } });
+  } else if (source && source.type === 'file') {
+    if (source.name !== f.name || source.size !== f.size) toast('Похоже, это другой файл. Синхронизация может не совпасть');
+    setSourceLocal(source, true);
+  }
+}
+$('#fileInput').onchange = (e) => { handleFile(e.target.files[0], true); e.target.value = ''; };
+$('#needInput').onchange = (e) => { handleFile(e.target.files[0], false); e.target.value = ''; };
+
+/* ---------- зрители, чат, реакции ---------- */
+function renderUsers(users) {
+  $('#count').textContent = users.length;
+  const box = $('#userList');
+  box.innerHTML = '';
+  users.forEach((u) => {
+    const d = document.createElement('div');
+    d.className = 'user';
+    const a = document.createElement('div');
+    a.className = 'ava';
+    a.style.background = colorFor(u.name);
+    a.textContent = u.name.trim().charAt(0).toUpperCase() || '?';
+    const n = document.createElement('span');
+    n.textContent = u.name + (u.id === myId ? ' (вы)' : '');
+    d.append(a, n);
+    box.appendChild(d);
+  });
+}
+function pushMsg(el) {
+  const box = $('#msgs');
+  const stick = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+  box.appendChild(el);
+  if (stick) box.scrollTop = box.scrollHeight;
+}
+function addMsg(m) {
+  const d = document.createElement('div');
+  d.className = 'msg';
+  const b = document.createElement('b');
+  b.style.color = colorFor(m.name);
+  b.textContent = m.name;
+  const s = document.createElement('span');
+  s.textContent = m.text;
+  d.append(b, s);
+  pushMsg(d);
+}
+function addSys(text) {
+  const d = document.createElement('div');
+  d.className = 'sys';
+  d.textContent = text;
+  pushMsg(d);
+}
+$('#chatForm').onsubmit = (e) => {
+  e.preventDefault();
+  const text = $('#chatInput').value.trim();
+  if (!text) return;
+  send({ type: 'chat', text });
+  $('#chatInput').value = '';
+};
+EMOJI.forEach((em) => {
+  const b = document.createElement('button');
+  b.textContent = em;
+  b.onclick = () => send({ type: 'reaction', emoji: em });
+  $('#reactions').appendChild(b);
+});
+function floatEmoji(em) {
+  const s = document.createElement('span');
+  s.className = 'float';
+  s.textContent = em;
+  s.style.left = 8 + Math.random() * 84 + '%';
+  s.addEventListener('animationend', () => s.remove());
+  $('#floaty').appendChild(s);
+}
+
+$('#copyBtn').onclick = async () => {
+  const url = location.origin + location.pathname + '?room=' + roomCode;
+  try { await navigator.clipboard.writeText(url); toast('Ссылка скопирована. Отправьте её друзьям'); }
+  catch { prompt('Скопируйте ссылку:', url); }
+};
+</script>
+</body>
+</html>
