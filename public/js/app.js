@@ -10,7 +10,9 @@
   let source = null, player = null, curToken = null, manualActive = false, manualWhy = '';
   let myFile = null, myFileUrl = null;
   let suppressUntil = 0;
-  let known = { playing: false, time: 0, at: Date.now() };
+  let rateLockUntil = 0;
+  let armed = false;
+  let known = { playing: false, time: 0, rate: 1, at: Date.now() };
   let dmColor = Math.min(7, Math.max(0, Number(KC.store.get('kc_dmcolor', 0)) | 0));
   const users = new Map();
 
@@ -44,8 +46,8 @@
   const send = (o) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); };
   const suppress = (ms = 700) => { suppressUntil = Date.now() + ms; };
   const isSuppressed = () => Date.now() < suppressUntil;
-  const est = () => (known.playing ? known.time + (Date.now() - known.at) / 1000 : known.time);
-  const setKnown = (playing, time) => { known = { playing, time, at: Date.now() }; };
+  const est = () => (known.playing ? known.time + ((Date.now() - known.at) / 1000) * (known.rate || 1) : known.time);
+  const setKnown = (playing, time, rate = known.rate || 1) => { known = { playing, time, rate, at: Date.now() }; };
 
   /* ---------- вход ---------- */
   $('#nameInput').value = profile.name;
@@ -84,7 +86,7 @@
   function joinMsg() {
     const m = { type: 'join', room: roomCode, name: profile.name, cid: myCid, avatar: avatarForServer() };
     // После переподключения (в т.ч. после «сна» Render) можно вернуть комнату в прежнее состояние
-    if (inRoom && source) m.resume = { source, time: est() };
+    if (inRoom && source) m.resume = { source, time: est(), rate: known.rate || 1 };
     return m;
   }
   function detach() {
@@ -187,7 +189,7 @@
         lastEid = m.eid;
         renderUsers(m.users);
         renderRecent(m.recent);
-        setKnown(m.state.playing, m.state.time);
+        setKnown(m.state.playing, m.state.time, m.state.rate || 1);
         if (!sameSrc(source, m.source) || !source) setSourceLocal(m.source);
         else applyState(m.state, false);
         startPing();
@@ -195,14 +197,16 @@
       }
       case 'users': renderUsers(m.users); break;
       case 'source':
-        setKnown(false, 0);
+        setKnown(false, 0, 1);
+        rateLockUntil = 0;
+        armed = false;
         setSourceLocal(m.source);
         renderRecent(m.recent);
         if (m.by && m.byId !== myId) toast(`${m.by} включил(а) новое видео`);
         break;
       case 'state': {
         if (m.by) {
-          const t = { play: 'нажал(а) play', pause: 'поставил(а) на паузу', seek: 'перемотал(а)' }[m.action];
+          const t = { play: 'нажал(а) play', pause: 'поставил(а) на паузу', seek: 'перемотал(а)', rate: 'выбрал(а) скорость ×' + (m.rate || 1) }[m.action];
           if (t) toast(`${m.by} ${t}`);
         }
         applyState(m, false);
@@ -243,34 +247,45 @@
   /* ---------- синхронизация ---------- */
   // isSync: периодическая сверка от сервера (мягкая коррекция), иначе событие от участника
   function applyState(s, isSync) {
-    const target = s.time + (s.playing ? oneWay : 0);
-    setKnown(s.playing, target);
+    if (isSync && Date.now() < rateLockUntil) return;
+    const rate = s.rate || 1;
+    const target = s.time + (s.playing ? oneWay * rate : 0);
+    setKnown(s.playing, target, rate);
     if (!player || !player.caps.control) return;
+    armed = true;
+    const needRate = !!player.caps.rate && Math.abs(player.rate() - rate) > 0.01;
     const diff = player.time() - target;
     const ad = Math.abs(diff);
     const soft = isSync && s.playing && !!player.nudge;
-    const needSeek = ad > (s.playing ? (soft ? 2 : 1.2) : 0.4) + (player.tol || 0); // tol: плеер с целыми секундами (VK)
+    const needSeek = s.action === 'rate' ? false : ad > (s.playing ? (soft ? 2 : 1.2) : 0.4) + (player.tol || 0); // tol: плеер с целыми секундами (VK)
     const needPlay = s.playing && !player.playing();
     const needPause = !s.playing && player.playing();
-    if (!needSeek && !needPlay && !needPause) {
+    if (!needRate && !needSeek && !needPlay && !needPause) {
       if (soft) player.nudge(ad > 0.3 ? diff : 0);
       return;
     }
     suppress();
+    if (needRate) player.setRate(rate);
     if (needSeek) { player.seek(target); if (player.nudge) player.nudge(0); }
     if (needPlay) player.play();
     if (needPause) player.pause();
   }
 
   // Локальное действие пользователя -> остальным
-  function emit(action, t) {
-    if (isSuppressed() || !connected || !player || !player.caps.control) return;
+  function emit(action, t, rate) {
+    if ((isSuppressed() && action !== 'rate') || !connected || !player || !player.caps.control) return;
     const e = est();
     if (action === 'play' && known.playing && Math.abs(t - e) < 2) return;
     if (action === 'pause' && !known.playing) return;
     if (action === 'seek' && Math.abs(t - e) < 1.5) return;
-    setKnown(action === 'play' || (action === 'seek' && known.playing), t);
-    send({ type: 'control', action, time: t });
+    if (action === 'rate') {
+      if (!armed || !player.caps.rate || Math.abs(rate - known.rate) < 0.01) return;
+      known = { playing: known.playing, time: e, rate, at: Date.now() };
+      rateLockUntil = Date.now() + 4000;
+    } else {
+      setKnown(action === 'play' || (action === 'seek' && known.playing), t);
+    }
+    send({ type: 'control', action, time: action === 'rate' ? e : t, ...(action === 'rate' ? { rate } : {}) });
   }
 
   /* ---------- источник и плеер ---------- */
