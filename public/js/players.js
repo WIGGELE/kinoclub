@@ -123,7 +123,7 @@
     box.id = 'yt' + Date.now();
     h.host.appendChild(box);
     let yt = null, ok = false, dead = false, poll = null, last = 0, lastAt = 0;
-    let lastStable = -1;
+    let lastStable = -1, lastRateChangeAt = 0;
     const p = {
       caps: { control: true, rate: true },
       time: () => (ok ? yt.getCurrentTime() : 0),
@@ -157,12 +157,15 @@
           onStateChange(e) {
             const state = e.data, prev = lastStable;
             if (state !== 3) lastStable = state;
-            if (h.suppressed()) return;
-            // Возврат из буферизации не считается новым нажатием Play.
+            if (h.suppressed() || performance.now() - lastRateChangeAt < 1200) return;
+            // Возврат из буферизации или смены скорости не считается новым нажатием Play.
             if (state === 1 && prev !== 1) h.emit('play', yt.getCurrentTime());
             else if (state === 2) h.emit('pause', yt.getCurrentTime());
           },
-          onPlaybackRateChange(e) { h.emit('rate', yt.getCurrentTime(), e.data); },
+          onPlaybackRateChange(e) {
+            lastRateChangeAt = performance.now();
+            h.emit('rate', yt.getCurrentTime(), e.data);
+          },
           onError() { h.toast('YouTube не смог открыть это видео (возможно, встраивание запрещено)'); },
         },
       });
