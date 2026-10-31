@@ -276,8 +276,11 @@
       else if (Date.now() - lastAutoSeek < 6000) needSeek = false;
     }
 
-    const needPlay = s.playing && !player.playing();
-    const needPause = !s.playing && player.playing();
+    const rateOnly = s.action === 'rate';
+    const buffering = player.buffering && player.buffering();
+    // Смена скорости и буферизация не должны сами запускать или останавливать видео.
+    const needPlay = !rateOnly && s.playing && !player.playing() && !buffering;
+    const needPause = !rateOnly && !s.playing && player.playing();
     if (!needRate && !needSeek && !needPlay && !needPause) {
       if (soft) player.nudge(ad > 0.3 ? diff : 0);
       return;
