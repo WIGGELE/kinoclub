@@ -11,6 +11,7 @@
   let myFile = null, myFileUrl = null;
   let suppressUntil = 0;
   let rateLockUntil = 0;
+  let lastAutoSeek = 0;
   let armed = false;
   let known = { playing: false, time: 0, rate: 1, at: Date.now() };
   let dmColor = Math.min(7, Math.max(0, Number(KC.store.get('kc_dmcolor', 0)) | 0));
@@ -247,29 +248,52 @@
   /* ---------- синхронизация ---------- */
   // isSync: периодическая сверка от сервера (мягкая коррекция), иначе событие от участника
   function applyState(s, isSync) {
-    if (isSync && Date.now() < rateLockUntil) return;
     const rate = s.rate || 1;
+    // После смены скорости игнорируем запоздавшие периодические sync-сообщения.
+    if (s.action === 'rate') rateLockUntil = Date.now() + 6000;
+    if (isSync && Date.now() < rateLockUntil) return;
+
     const target = s.time + (s.playing ? oneWay * rate : 0);
     setKnown(s.playing, target, rate);
     if (!player || !player.caps.control) return;
     armed = true;
+
     const needRate = !!player.caps.rate && Math.abs(player.rate() - rate) > 0.01;
     const diff = player.time() - target;
     const ad = Math.abs(diff);
     const soft = isSync && s.playing && !!player.nudge;
-    const needSeek = s.action === 'rate' ? false : ad > (s.playing ? (soft ? 2 : 1.2) : 0.4) + (player.tol || 0); // tol: плеер с целыми секундами (VK)
+
+    // При смене скорости позицию вообще не перематываем.
+    let tolerance;
+    if (s.action === 'rate') tolerance = Infinity;
+    else if (!s.playing) tolerance = isSync ? 1 : 0.4;
+    else if (isSync) tolerance = 3;
+    else tolerance = 1.5;
+
+    let needSeek = ad > tolerance + (player.tol || 0);
+    if (needSeek && isSync) {
+      if (player.buffering && player.buffering()) needSeek = false;
+      else if (Date.now() - lastAutoSeek < 6000) needSeek = false;
+    }
+
     const needPlay = s.playing && !player.playing();
     const needPause = !s.playing && player.playing();
     if (!needRate && !needSeek && !needPlay && !needPause) {
       if (soft) player.nudge(ad > 0.3 ? diff : 0);
       return;
     }
+
     suppress();
     if (needRate) player.setRate(rate);
-    if (needSeek) { player.seek(target); if (player.nudge) player.nudge(0); }
+    if (needSeek) {
+      player.seek(target);
+      if (player.nudge) player.nudge(0);
+      if (isSync) lastAutoSeek = Date.now();
+    }
     if (needPlay) player.play();
     if (needPause) player.pause();
   }
+
 
   // Локальное действие пользователя -> остальным
   function emit(action, t, rate) {
@@ -281,7 +305,7 @@
     if (action === 'rate') {
       if (!armed || !player.caps.rate || Math.abs(rate - known.rate) < 0.01) return;
       known = { playing: known.playing, time: e, rate, at: Date.now() };
-      rateLockUntil = Date.now() + 4000;
+      rateLockUntil = Date.now() + 6000;
     } else {
       setKnown(action === 'play' || (action === 'seek' && known.playing), t);
     }
