@@ -45,7 +45,7 @@
     // полноэкранный режим даёт наша кнопка: так поверх видео остаются комментарии и реакции
     v.setAttribute('controlslist', 'nofullscreen');
     h.host.appendChild(v);
-    let hls = null, dead = false, rateTimer = null;
+    let hls = null, dead = false, rateTimer = null, baseRate = 1, nudging = false;
     const isHls = /\.m3u8(\?|#|$)/i.test(url);
     if (!isHls || v.canPlayType('application/vnd.apple.mpegurl')) v.src = url;
     else {
@@ -59,18 +59,25 @@
       }).catch(() => h.toast('Не удалось загрузить библиотеку HLS'));
     }
     const p = {
-      caps: { control: true },
+      caps: { control: true, rate: true },
       time: () => v.currentTime,
       playing: () => !v.paused && !v.ended,
       play: () => { const r = v.play(); if (r && r.catch) r.catch(() => h.toast('Браузер заблокировал автозапуск. Нажмите ▶ в плеере')); },
       pause: () => v.pause(),
       seek: (t) => { v.currentTime = t; },
-      // Небольшой дрейф исправляем не рывком, а слегка меняя скорость
+      rate: () => v.playbackRate,
+      setRate: (r) => { baseRate = r; if (!nudging) v.playbackRate = r; },
+      // При мягкой коррекции сохраняем выбранную пользователем скорость.
       nudge(drift) {
         clearTimeout(rateTimer);
-        if (!drift) { v.playbackRate = 1; return; }
-        v.playbackRate = drift > 0 ? 0.95 : 1.05;
-        rateTimer = setTimeout(() => { v.playbackRate = 1; }, Math.min(8000, (Math.abs(drift) / 0.05) * 1000));
+        nudging = true;
+        if (!drift) {
+          v.playbackRate = baseRate;
+          rateTimer = setTimeout(() => { nudging = false; }, 250);
+          return;
+        }
+        v.playbackRate = baseRate * (drift > 0 ? 0.95 : 1.05);
+        rateTimer = setTimeout(() => { v.playbackRate = baseRate; nudging = false; }, Math.min(8000, (Math.abs(drift) / 0.05) * 1000));
       },
       destroy() {
         dead = true;
@@ -83,6 +90,7 @@
     v.addEventListener('play', () => h.emit('play', v.currentTime));
     v.addEventListener('pause', () => { if (!v.ended) h.emit('pause', v.currentTime); });
     v.addEventListener('seeked', () => h.emit('seek', v.currentTime));
+    v.addEventListener('ratechange', () => { if (!nudging) { baseRate = v.playbackRate; h.emit('rate', v.currentTime, v.playbackRate); } });
     v.addEventListener('error', () => { if (v.getAttribute('src')) h.toast('Не удалось загрузить видео. Проверьте ссылку или формат файла'); });
     return p;
   }
@@ -105,12 +113,14 @@
     h.host.appendChild(box);
     let yt = null, ok = false, dead = false, poll = null, last = 0;
     const p = {
-      caps: { control: true },
+      caps: { control: true, rate: true },
       time: () => (ok ? yt.getCurrentTime() : 0),
       playing: () => ok && yt.getPlayerState() === 1,
       play: () => ok && yt.playVideo(),
       pause: () => ok && yt.pauseVideo(),
       seek: (t) => ok && yt.seekTo(t, true),
+      rate: () => (ok ? yt.getPlaybackRate() : 1),
+      setRate: (r) => ok && yt.setPlaybackRate(r),
       destroy() { dead = true; clearInterval(poll); try { yt && yt.destroy(); } catch {} box.remove(); },
     };
     // YouTube не сообщает о перемотке событием, поэтому раз в 500 мс ищем «скачок» времени
@@ -133,6 +143,7 @@
             if (e.data === 1) h.emit('play', yt.getCurrentTime());
             else if (e.data === 2) h.emit('pause', yt.getCurrentTime());
           },
+          onPlaybackRateChange(e) { h.emit('rate', yt.getCurrentTime(), e.data); },
           onError() { h.toast('YouTube не смог открыть это видео (возможно, встраивание запрещено)'); },
         },
       });
