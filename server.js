@@ -40,7 +40,7 @@ function take(b) {
   b.n -= 1;
   return true;
 }
-const pos = (r) => (r.playing ? r.time + (Date.now() - r.at) / 1000 : r.time);
+const pos = (r) => (r.playing ? r.time + ((Date.now() - r.at) / 1000) * (r.rate || 1) : r.time);
 const send = (ws, o) => { if (ws.readyState === 1) ws.send(JSON.stringify(o)); };
 function broadcast(r, o, except) {
   const s = JSON.stringify(o); // сериализуем один раз на всех
@@ -53,7 +53,7 @@ const presetOnly = (ref) => (ref && ref[0] === 'p' ? ref : undefined);
 /* ---------- комнаты ---------- */
 function createRoom(code) {
   const r = {
-    code, source: null, playing: false, time: 0, at: Date.now(),
+    code, source: null, playing: false, time: 0, rate: 1, at: Date.now(),
     clients: new Map(), history: [], recent: [], lastEid: 0,
     timer: null, left: new Map(), soundLog: [], lastCountdown: 0,
   };
@@ -142,6 +142,7 @@ function join(ws, m) {
     if (src) {
       r.source = src;
       r.time = isFinite(t) && t >= 0 && t <= MAX_TIME ? t : 0;
+      r.rate = typeof res.rate === 'number' && isFinite(res.rate) && res.rate >= 0.25 && res.rate <= 4 ? res.rate : 1;
       r.playing = false;
       r.at = Date.now();
       pushRecent(r, src);
@@ -151,7 +152,7 @@ function join(ws, m) {
   send(ws, {
     type: 'init', you: cid, epoch: EPOCH, eid: r.lastEid,
     users: userList(r), source: r.source, recent: r.recent,
-    state: { playing: r.playing, time: pos(r) }, history: r.history,
+    state: { playing: r.playing, time: pos(r), rate: r.rate }, history: r.history,
   });
   broadcast(r, { type: 'users', users: userList(r) }, ws);
   if (!old && !wasAway) broadcast(r, { type: 'sys', text: `${ws.name} зашёл(а)` }, ws);
@@ -170,16 +171,23 @@ function handle(ws, m) {
     case 'control': {
       if (!take(ws.ctlB)) return;
       const t = m.time;
-      if (!['play', 'pause', 'seek'].includes(m.action) || typeof t !== 'number' || !isFinite(t) || t < 0 || t > MAX_TIME) return;
-      r.time = t;
-      if (m.action === 'play') r.playing = true;
-      if (m.action === 'pause') r.playing = false;
+      if (!['play', 'pause', 'seek', 'rate'].includes(m.action) || typeof t !== 'number' || !isFinite(t) || t < 0 || t > MAX_TIME) return;
+      if (m.action === 'rate') {
+        const rate = m.rate;
+        if (typeof rate !== 'number' || !isFinite(rate) || rate < 0.25 || rate > 4) return;
+        r.time = pos(r);
+        r.rate = rate;
+      } else {
+        r.time = t;
+        if (m.action === 'play') r.playing = true;
+        if (m.action === 'pause') r.playing = false;
+      }
       r.at = Date.now();
-      broadcast(r, { type: 'state', playing: r.playing, time: r.time, by: ws.name, action: m.action }, ws);
+      broadcast(r, { type: 'state', playing: r.playing, time: r.time, rate: r.rate, by: ws.name, action: m.action }, ws);
       break;
     }
     case 'needState':
-      send(ws, { type: 'state', playing: r.playing, time: pos(r) });
+      send(ws, { type: 'state', playing: r.playing, time: pos(r), rate: r.rate });
       break;
     case 'setSource': {
       const src = validSource(m.source);
@@ -188,6 +196,7 @@ function handle(ws, m) {
       r.source = src;
       r.playing = false;
       r.time = 0;
+      r.rate = 1;
       r.at = Date.now();
       pushRecent(r, src);
       broadcast(r, { type: 'source', source: src, by: ws.name, byId: ws.id, recent: r.recent });
@@ -367,7 +376,7 @@ const syncTimer = setInterval(() => {
   tick++;
   for (const r of rooms.values()) {
     if (!r.clients.size || !(r.playing || tick % 4 === 0)) continue;
-    broadcast(r, { type: 'sync', playing: r.playing, time: pos(r) });
+    broadcast(r, { type: 'sync', playing: r.playing, time: pos(r), rate: r.rate });
   }
 }, 8000);
 syncTimer.unref();
