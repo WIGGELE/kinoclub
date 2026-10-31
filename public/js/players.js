@@ -46,6 +46,7 @@
     v.setAttribute('controlslist', 'nofullscreen');
     h.host.appendChild(v);
     let hls = null, dead = false, rateTimer = null, baseRate = 1, nudging = false;
+    let selfSeeks = 0, selfSeekTimer = null;
     const isHls = /\.m3u8(\?|#|$)/i.test(url);
     if (!isHls || v.canPlayType('application/vnd.apple.mpegurl')) v.src = url;
     else {
@@ -61,10 +62,16 @@
     const p = {
       caps: { control: true, rate: true },
       time: () => v.currentTime,
+      buffering: () => v.seeking || (!v.paused && v.readyState < 3),
       playing: () => !v.paused && !v.ended,
       play: () => { const r = v.play(); if (r && r.catch) r.catch(() => h.toast('Браузер заблокировал автозапуск. Нажмите ▶ в плеере')); },
       pause: () => v.pause(),
-      seek: (t) => { v.currentTime = t; },
+      seek: (t) => {
+        selfSeeks++;
+        clearTimeout(selfSeekTimer);
+        selfSeekTimer = setTimeout(() => { selfSeeks = 0; }, 5000);
+        v.currentTime = t;
+      },
       rate: () => v.playbackRate,
       setRate: (r) => { baseRate = r; if (!nudging) v.playbackRate = r; },
       // При мягкой коррекции сохраняем выбранную пользователем скорость.
@@ -82,6 +89,7 @@
       destroy() {
         dead = true;
         clearTimeout(rateTimer);
+        clearTimeout(selfSeekTimer);
         if (hls) hls.destroy();
         v.pause(); v.removeAttribute('src'); v.load(); v.remove();
       },
@@ -89,7 +97,10 @@
     v.addEventListener('loadedmetadata', () => h.onReady(p), { once: true });
     v.addEventListener('play', () => h.emit('play', v.currentTime));
     v.addEventListener('pause', () => { if (!v.ended) h.emit('pause', v.currentTime); });
-    v.addEventListener('seeked', () => h.emit('seek', v.currentTime));
+    v.addEventListener('seeked', () => {
+      if (selfSeeks > 0) { selfSeeks--; return; }
+      h.emit('seek', v.currentTime);
+    });
     v.addEventListener('ratechange', () => { if (!nudging) { baseRate = v.playbackRate; h.emit('rate', v.currentTime, v.playbackRate); } });
     v.addEventListener('error', () => { if (v.getAttribute('src')) h.toast('Не удалось загрузить видео. Проверьте ссылку или формат файла'); });
     return p;
@@ -111,10 +122,12 @@
     const box = document.createElement('div');
     box.id = 'yt' + Date.now();
     h.host.appendChild(box);
-    let yt = null, ok = false, dead = false, poll = null, last = 0;
+    let yt = null, ok = false, dead = false, poll = null, last = 0, lastAt = 0;
+    let lastStable = -1;
     const p = {
       caps: { control: true, rate: true },
       time: () => (ok ? yt.getCurrentTime() : 0),
+      buffering: () => ok && yt.getPlayerState() === 3,
       playing: () => ok && yt.getPlayerState() === 1,
       play: () => ok && yt.playVideo(),
       pause: () => ok && yt.pauseVideo(),
@@ -125,11 +138,14 @@
     };
     // YouTube не сообщает о перемотке событием, поэтому раз в 500 мс ищем «скачок» времени
     function tick() {
-      if (document.hidden) return;
+      const now = performance.now();
       const t = yt.getCurrentTime();
-      const expected = last + (yt.getPlayerState() === 1 ? 0.5 : 0);
-      if (Math.abs(t - expected) > 1.5 && !h.suppressed()) h.emit('seek', t);
+      const elapsed = now - lastAt;
+      const late = elapsed > 1500;
+      const expected = last + (yt.getPlayerState() === 1 ? (elapsed / 1000) * yt.getPlaybackRate() : 0);
+      if (!late && Math.abs(t - expected) > 1.5 && !h.suppressed()) h.emit('seek', t);
       last = t;
+      lastAt = now;
     }
     loadYT().then(() => {
       if (dead) return;
@@ -137,11 +153,14 @@
         videoId: id, width: '100%', height: '100%',
         playerVars: { playsinline: 1, rel: 0, fs: 0, origin: location.origin },
         events: {
-          onReady() { ok = true; last = yt.getCurrentTime(); poll = setInterval(tick, 500); h.onReady(p); },
+          onReady() { ok = true; last = yt.getCurrentTime(); lastAt = performance.now(); poll = setInterval(tick, 500); h.onReady(p); },
           onStateChange(e) {
+            const state = e.data, prev = lastStable;
+            if (state !== 3) lastStable = state;
             if (h.suppressed()) return;
-            if (e.data === 1) h.emit('play', yt.getCurrentTime());
-            else if (e.data === 2) h.emit('pause', yt.getCurrentTime());
+            // Возврат из буферизации не считается новым нажатием Play.
+            if (state === 1 && prev !== 1) h.emit('play', yt.getCurrentTime());
+            else if (state === 2) h.emit('pause', yt.getCurrentTime());
           },
           onPlaybackRateChange(e) { h.emit('rate', yt.getCurrentTime(), e.data); },
           onError() { h.toast('YouTube не смог открыть это видео (возможно, встраивание запрещено)'); },
